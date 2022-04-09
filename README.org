@@ -1,4 +1,4 @@
-#+TITLE: Iplementation of MADDPG on FoodCollector
+#+TITLE: Implementation of MADDPG on FoodCollector
 
 
 * 1. Introduction
