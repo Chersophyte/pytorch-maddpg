@@ -26,8 +26,9 @@ class Critic(nn.Module):
 
 
 class Actor(nn.Module):
-    def __init__(self, dim_observation, dim_action):
+    def __init__(self, dim_observation, dim_action, alpha=0.01):
         super(Actor, self).__init__()
+        self.alpha = alpha
         self.FC1 = nn.Linear(dim_observation, 500)
         self.FC2 = nn.Linear(500, 128)
         self.FC3 = nn.Linear(128, dim_action)
@@ -37,4 +38,4 @@ class Actor(nn.Module):
         result = F.relu(self.FC1(obs))
         result = F.relu(self.FC2(result))
         result = F.tanh(self.FC3(result))
-        return result
+        return self.alpha*result

@@ -26,9 +26,9 @@ def hard_update(target, source):
 
 class MADDPG(nn.Module):
     def __init__(self, n_agents, dim_obs, dim_act, batch_size,
-                 capacity, episodes_before_train, noise_var=0.001, alpha=0.05):
+                 capacity, episodes_before_train, noise_var=0.001, alpha=0.01):
         super(MADDPG, self).__init__()
-        self.actors = [Actor(dim_obs, dim_act).to(Param.device) for i in range(n_agents)]
+        self.actors = [Actor(dim_obs, dim_act, alpha=alpha).to(Param.device) for i in range(n_agents)]
         self.critics = [Critic(n_agents, dim_obs,
                                dim_act).to(Param.device) for i in range(n_agents)]
         self.actors_target = deepcopy(self.actors)
@@ -49,9 +49,9 @@ class MADDPG(nn.Module):
 
         self.var = [0.01 for i in range(n_agents)]
         self.critic_optimizer = [Adam(x.parameters(),
-                                      lr=0.001) for x in self.critics]
+                                      lr=1e-4) for x in self.critics]
         self.actor_optimizer = [Adam(x.parameters(),
-                                     lr=0.0001) for x in self.actors]
+                                     lr=1e-5) for x in self.actors]
 
         self.steps_done = 0
         self.episode_done = 0
@@ -114,7 +114,7 @@ class MADDPG(nn.Module):
 
             self.actor_optimizer[agent].zero_grad()
             state_i = state_batch[:, agent, :]
-            action_i = self.actors[agent](state_i)*self.alpha
+            action_i = self.actors[agent](state_i)
             ac = action_batch.clone()
             ac[:, agent, :] = action_i
             whole_action = ac.view(self.batch_size, -1)
@@ -139,14 +139,14 @@ class MADDPG(nn.Module):
             self.n_actions)
         for i in range(self.n_agents):
             sb = state_batch[i, :].detach()
-            act = self.alpha*self.actors[i](sb.unsqueeze(0)).squeeze()
+            act = self.actors[i](sb.unsqueeze(0)).squeeze()
 
             act += torch.from_numpy(
                 np.random.randn(2) * self.var[i]).to(Param.device).type(Param.dtype)
 
             if self.episode_done > self.episodes_before_train and\
                self.var[i] > self.noise_var:
-                self.var[i] *= 0.999998
+                self.var[i] *= 0.9998
             act = torch.clamp(act, -0.01, 0.01)
 
             actions[i, :] = act
@@ -157,10 +157,12 @@ class MADDPG(nn.Module):
     def save(self, model_dir='./learned_models/', model_name='maddpg_policy'):
         torch.save({"Actors":[actor.state_dict() for actor in self.actors],
                     "Critics":[critic.state_dict() for critic in self.critics],
+                    "Alpha":self.alpha
                    }, os.path.join(model_dir,model_name))
 
     def load(self, model_dir):
         state_dict = torch.load(model_dir, map_location=Param.device)
         for i in range(len(self.actors)):
             self.actors[i].load(state_dict["Actors"][i])
+            self.actors[i].alpha=state_dict["Alpha"]
             self.critics[i].load(state_dict["Critics"][i])

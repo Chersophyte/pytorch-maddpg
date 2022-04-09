@@ -88,7 +88,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', '-s', type=int, default=0)
     parser.add_argument('--episodes', type=int, default=20000)
     parser.add_argument('--exp-name', type=str, default='ppo')
-    parser.add_argument('--log-freq', type=int, default=60)
+    parser.add_argument('--log-freq', type=int, default=20)
     parser.add_argument('--trained-dir', type=str)
     parser.add_argument('--render', action="store_true")
     parser.add_argument('--truth', action="store_true")
@@ -164,14 +164,7 @@ if __name__ == '__main__':
                 speed_features=args.speed_features, use_groudtruth=args.truth, 
                 smart_comm=args.smart, comm_freq=args.comm_freq)
     
-    ### Setup Randomized Ablation Parameter
-    if args.ablate:
-        ablate_kwargs={"k":args.ablate_k, "n":args.n_pursuers, 
-                       "adv_train": True if args.convert_adv else False, 
-                       "adv_agents": args.convert_adv if args.convert_adv else [],
-                       "median":args.ablate_median}
-    else:
-        ablate_kwargs=None
+    ablate_kwargs=None
     
     observation_space = env.observation_spaces[good_agent_name[0]]
     action_space      = env.action_spaces[good_agent_name[0]]
@@ -189,12 +182,6 @@ if __name__ == '__main__':
         obs_dim = env.observation_spaces[good_agent_name[0]].shape 
     
     gym.logger.set_level(40)
-    
-    if args.ablate:
-        ablate_kwargs={"k":args.ablate_k, "n":args.n_pursuers, 
-                       "adv_train": True if args.convert_adv else False, 
-                       "adv_agents": args.convert_adv if args.convert_adv else [],
-                       "median":args.ablate_median}
     
     ### Set Environment Seed
     np.random.seed(args.seed)
@@ -226,14 +213,7 @@ if __name__ == '__main__':
                         to(Param.device).type(Param.dtype)).data.cpu().numpy()
             for i in range(len(good_agent_name)):
                 good_actions[good_agent_name[i]] = action[i,:]
-                #print(action[i,:])
-                # if not dist_action:
-                #     a = a.cpu().numpy()
-                # else:
-                #     a = a.item()
-                # good_actions[agent] = a
-                # action[count, :] = a
-                # count += 1
+                print(action[i,:], flush=True)
 
             if args.comm:
                 next_o, c, reward, done, infos = env.step(good_actions)
@@ -270,7 +250,7 @@ if __name__ == '__main__':
 
         if (i_episode%args.log_freq == 0):
             print("----------------------Episode {}----------------------------".format(i_episode))
-            logger_file.write("----------------------Epoch {}----------------------------\n".format(i_episode))
+            logger_file.write("----------------------Episode {}----------------------------\n".format(i_episode))
             print("EpRet:{}".format(sum(avg_return)/len(avg_return)))
             logger_file.write("EpRet:{}\n".format(sum(avg_return)/len(avg_return)))
             maddpg.save(model_name='maddpg_{}'.format(args.exp_name))
