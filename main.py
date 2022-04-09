@@ -93,8 +93,11 @@ if __name__ == '__main__':
     parser.add_argument('--render', action="store_true")
     parser.add_argument('--truth', action="store_true")
     parser.add_argument('--smart', action="store_true")
-    parser.add_argument('--noise-var', type=float, default=0.002)
-    parser.add_argument('--alpha', type=float, default=0.05)
+    
+    parser.add_argument('--actor-lr', type=float, default=1e-5)
+    parser.add_argument('--critic-lr', type=float, default=3e-6)
+    parser.add_argument('--noise-var', type=float, default=0.001)
+    parser.add_argument('--alpha', type=float, default=0.01)
         
     parser.add_argument('--count-agent', type=str, default='pursuer_0')
     parser.add_argument('--window-size', type=float, default=1.0)
@@ -142,6 +145,7 @@ if __name__ == '__main__':
     logger_file.write("Food Speed: {}  Poison Speed:{}\n".\
                       format(args.evader_speed, args.poison_speed))
     
+    
     ### Setup Environment
     if args.convert_adv:
         env, good_agent_name, adv_agent_name = make_advcomm_env(adv_agents=args.convert_adv, good_policy_dir=args.good_policy, victim=args.victim,
@@ -188,13 +192,21 @@ if __name__ == '__main__':
     torch.manual_seed(args.seed)
     env.seed(args.seed)
     
+    ### Set MADDPG Parameters
+    kwargs = {"actor-lr":args.actor_lr,
+              "critic-lr":args.critic_lr,
+              "alpha":args.alpha,
+              "noise-var":args.noise_var
+             }
+    
+    
     capacity = int(5e+5)
     batch_size = 1000
     n_agents = len(good_agent_name)
     episodes_before_train = 60
 
     maddpg = MADDPG(n_agents, obs_dim, act_dim, batch_size, capacity,
-                    episodes_before_train, noise_var=args.noise_var, alpha=args.alpha)
+                    episodes_before_train, kwargs=kwargs)
 
     avg_return = deque(maxlen=args.log_freq)
     for i_episode in range(args.episodes):
@@ -213,7 +225,7 @@ if __name__ == '__main__':
                         to(Param.device).type(Param.dtype)).data.cpu().numpy()
             for i in range(len(good_agent_name)):
                 good_actions[good_agent_name[i]] = action[i,:]
-                print(action[i,:], flush=True)
+                #print(action[i,:], flush=True)
 
             if args.comm:
                 next_o, c, reward, done, infos = env.step(good_actions)
@@ -227,6 +239,11 @@ if __name__ == '__main__':
                 env.render()
 
             ### Update the Memory
+            #print("Observation:{}".format(obs[0]), flush=True)
+            #print("Action:{}".format(action[0]), flush=True)
+            #print("Next Observation:{}".format(next_obs[0]), flush=True)
+            #print("Variance:{}".format(maddpg.var[0]), flush=True)
+            
             maddpg.memory.push(torch.from_numpy(obs), torch.from_numpy(action), torch.from_numpy(next_obs), reward_arr)
             obs = next_obs
 
