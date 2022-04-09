@@ -88,12 +88,14 @@ if __name__ == '__main__':
     parser.add_argument('--seed', '-s', type=int, default=0)
     parser.add_argument('--episodes', type=int, default=20000)
     parser.add_argument('--exp-name', type=str, default='ppo')
-    parser.add_argument('--log-freq', type=int, default=20)
+    parser.add_argument('--log-freq', type=int, default=60)
     parser.add_argument('--trained-dir', type=str)
     parser.add_argument('--render', action="store_true")
     parser.add_argument('--truth', action="store_true")
     parser.add_argument('--smart', action="store_true")
-    
+    parser.add_argument('--noise-var', type=float, default=0.002)
+    parser.add_argument('--alpha', type=float, default=0.05)
+        
     parser.add_argument('--count-agent', type=str, default='pursuer_0')
     parser.add_argument('--window-size', type=float, default=1.0)
     parser.add_argument('--n-pursuers', type=int, default=3)
@@ -202,10 +204,10 @@ if __name__ == '__main__':
     capacity = int(5e+5)
     batch_size = 1000
     n_agents = len(good_agent_name)
-    episodes_before_train = 100
+    episodes_before_train = 60
 
     maddpg = MADDPG(n_agents, obs_dim, act_dim, batch_size, capacity,
-                    episodes_before_train)
+                    episodes_before_train, noise_var=args.noise_var, alpha=args.alpha)
 
     avg_return = deque(maxlen=args.log_freq)
     for i_episode in range(args.episodes):
@@ -219,12 +221,12 @@ if __name__ == '__main__':
         obs = encode_obs(good_agent_name, obs_dim, o)
         for t in range(args.max_cycle): 
             good_actions = {}
-            action = np.zeros((n_agents, act_dim))
             count  = 0
-            a = maddpg.select_action(torch.from_numpy(obs).\
+            action = maddpg.select_action(torch.from_numpy(obs).\
                         to(Param.device).type(Param.dtype)).data.cpu().numpy()
             for i in range(len(good_agent_name)):
                 good_actions[good_agent_name[i]] = action[i,:]
+                #print(action[i,:])
                 # if not dist_action:
                 #     a = a.cpu().numpy()
                 # else:
@@ -260,10 +262,8 @@ if __name__ == '__main__':
                 ep_ret = good_total_rewards[i]
                 avg_return.append(ep_ret)
 
-            ### Update Policy
-            #if (t%10 == 0):
             c_loss, a_loss = maddpg.update_policy()
-
+        #print("c_loss:{}, a_loss:{}".format(c_loss, a_loss))
         if maddpg.episode_done == maddpg.episodes_before_train:
             print('training now begins...')
         maddpg.episode_done += 1
@@ -273,6 +273,7 @@ if __name__ == '__main__':
             logger_file.write("----------------------Epoch {}----------------------------\n".format(i_episode))
             print("EpRet:{}".format(sum(avg_return)/len(avg_return)))
             logger_file.write("EpRet:{}\n".format(sum(avg_return)/len(avg_return)))
-
+            maddpg.save(model_name='maddpg_{}'.format(args.exp_name))
+            logger_file.flush()
     print("------------------------Finish Training-----------------------------")
     logger_file.close()

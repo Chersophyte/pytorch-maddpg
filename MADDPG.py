@@ -7,6 +7,7 @@ from randomProcess import OrnsteinUhlenbeckProcess
 import torch.nn as nn
 import numpy as np
 from param import Param
+import os
 #from params import scale_reward
 scale_reward=0.1
 
@@ -23,9 +24,10 @@ def hard_update(target, source):
         target_param.data.copy_(source_param.data)
 
 
-class MADDPG:
+class MADDPG(nn.Module):
     def __init__(self, n_agents, dim_obs, dim_act, batch_size,
-                 capacity, episodes_before_train):
+                 capacity, episodes_before_train, noise_var=0.001, alpha=0.05):
+        super(MADDPG, self).__init__()
         self.actors = [Actor(dim_obs, dim_act).to(Param.device) for i in range(n_agents)]
         self.critics = [Critic(n_agents, dim_obs,
                                dim_act).to(Param.device) for i in range(n_agents)]
@@ -41,8 +43,11 @@ class MADDPG:
 
         self.GAMMA = 0.95
         self.tau = 0.01
+        
+        self.alpha = alpha
+        self.noise_var = noise_var
 
-        self.var = [1.0 for i in range(n_agents)]
+        self.var = [0.01 for i in range(n_agents)]
         self.critic_optimizer = [Adam(x.parameters(),
                                       lr=0.001) for x in self.critics]
         self.actor_optimizer = [Adam(x.parameters(),
@@ -109,7 +114,7 @@ class MADDPG:
 
             self.actor_optimizer[agent].zero_grad()
             state_i = state_batch[:, agent, :]
-            action_i = self.actors[agent](state_i)
+            action_i = self.actors[agent](state_i)*self.alpha
             ac = action_batch.clone()
             ac[:, agent, :] = action_i
             whole_action = ac.view(self.batch_size, -1)
@@ -134,17 +139,28 @@ class MADDPG:
             self.n_actions)
         for i in range(self.n_agents):
             sb = state_batch[i, :].detach()
-            act = self.actors[i](sb.unsqueeze(0)).squeeze()
+            act = self.alpha*self.actors[i](sb.unsqueeze(0)).squeeze()
 
             act += torch.from_numpy(
                 np.random.randn(2) * self.var[i]).to(Param.device).type(Param.dtype)
 
             if self.episode_done > self.episodes_before_train and\
-               self.var[i] > 0.05:
+               self.var[i] > self.noise_var:
                 self.var[i] *= 0.999998
-            act = torch.clamp(act, -1.0, 1.0)
+            act = torch.clamp(act, -0.01, 0.01)
 
             actions[i, :] = act
         self.steps_done += 1
 
         return actions
+    
+    def save(self, model_dir='./learned_models/', model_name='maddpg_policy'):
+        torch.save({"Actors":[actor.state_dict() for actor in self.actors],
+                    "Critics":[critic.state_dict() for critic in self.critics],
+                   }, os.path.join(model_dir,model_name))
+
+    def load(self, model_dir):
+        state_dict = torch.load(model_dir, map_location=Param.device)
+        for i in range(len(self.actors)):
+            self.actors[i].load(state_dict["Actors"][i])
+            self.critics[i].load(state_dict["Critics"][i])
