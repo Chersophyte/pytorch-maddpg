@@ -11,7 +11,7 @@ This is a pytorch implementation of MADDPG for the FoodCollector Environment ada
 * 4. Install
 
 Example of a script:
-- =python -W ignore main.py --exp-name benign_var0.02_alpha0.001 --alpha 0.02 --noise-var 0.001 --comm --smart --evader-speed 0 --poison-speed 0 --n-sensors 6 --n-pursuers 9 --n-evaders 1 --n-poison 1 --max-cycle 200 --cuda 0=
+- =python -W ignore main.py --exp-name benign_var0.001_alpha0.01 --noise-var 0.001 --alpha 0.01 --comm --smart --evader-speed 0 --poison-speed 0 --n-sensors 6 --n-pursuers 9 --n-evaders 1 --n-poison 1 --max-cycle 200 --cuda 0 --log-freq 20 --actor-lr 1e-4 --critic-lr 1e-5=
 
 
 
