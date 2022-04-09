@@ -1,13 +1,14 @@
 from model import Critic, Actor
-import torch as th
+import torch
 from copy import deepcopy
 from memory import ReplayMemory, Experience
 from torch.optim import Adam
 from randomProcess import OrnsteinUhlenbeckProcess
 import torch.nn as nn
 import numpy as np
-from params import scale_reward
-
+from param import Param
+#from params import scale_reward
+scale_reward=0.1
 
 def soft_update(target, source, t):
     for target_param, source_param in zip(target.parameters(),
@@ -25,9 +26,9 @@ def hard_update(target, source):
 class MADDPG:
     def __init__(self, n_agents, dim_obs, dim_act, batch_size,
                  capacity, episodes_before_train):
-        self.actors = [Actor(dim_obs, dim_act) for i in range(n_agents)]
+        self.actors = [Actor(dim_obs, dim_act).to(Param.device) for i in range(n_agents)]
         self.critics = [Critic(n_agents, dim_obs,
-                               dim_act) for i in range(n_agents)]
+                               dim_act).to(Param.device) for i in range(n_agents)]
         self.actors_target = deepcopy(self.actors)
         self.critics_target = deepcopy(self.critics)
 
@@ -36,7 +37,6 @@ class MADDPG:
         self.n_actions = dim_act
         self.memory = ReplayMemory(capacity)
         self.batch_size = batch_size
-        self.use_cuda = th.cuda.is_available()
         self.episodes_before_train = episodes_before_train
 
         self.GAMMA = 0.95
@@ -48,16 +48,6 @@ class MADDPG:
         self.actor_optimizer = [Adam(x.parameters(),
                                      lr=0.0001) for x in self.actors]
 
-        if self.use_cuda:
-            for x in self.actors:
-                x.cuda()
-            for x in self.critics:
-                x.cuda()
-            for x in self.actors_target:
-                x.cuda()
-            for x in self.critics_target:
-                x.cuda()
-
         self.steps_done = 0
         self.episode_done = 0
 
@@ -66,8 +56,7 @@ class MADDPG:
         if self.episode_done <= self.episodes_before_train:
             return None, None
 
-        ByteTensor = th.cuda.ByteTensor if self.use_cuda else th.ByteTensor
-        FloatTensor = th.cuda.FloatTensor if self.use_cuda else th.FloatTensor
+        ByteTensor = torch.ByteTensor if torch.device.type == "cpu" else torch.cuda.ByteTensor
 
         c_loss = []
         a_loss = []
@@ -77,13 +66,13 @@ class MADDPG:
             non_final_mask = ByteTensor(list(map(lambda s: s is not None,
                                                  batch.next_states)))
             # state_batch: batch_size x n_agents x dim_obs
-            state_batch = th.stack(batch.states).type(FloatTensor)
-            action_batch = th.stack(batch.actions).type(FloatTensor)
-            reward_batch = th.stack(batch.rewards).type(FloatTensor)
+            state_batch = torch.stack(batch.states).to(Param.device).type(Param.dtype)
+            action_batch = torch.stack(batch.actions).to(Param.device).type(Param.dtype)
+            reward_batch = torch.stack(batch.rewards).to(Param.device).type(Param.dtype)
             # : (batch_size_non_final) x n_agents x dim_obs
-            non_final_next_states = th.stack(
+            non_final_next_states = torch.stack(
                 [s for s in batch.next_states
-                 if s is not None]).type(FloatTensor)
+                 if s is not None]).to(Param.device).type(Param.dtype)
 
             # for current agent
             whole_state = state_batch.view(self.batch_size, -1)
@@ -96,13 +85,13 @@ class MADDPG:
                                                             i,
                                                             :]) for i in range(
                                                                 self.n_agents)]
-            non_final_next_actions = th.stack(non_final_next_actions)
+            non_final_next_actions = torch.stack(non_final_next_actions)
             non_final_next_actions = (
                 non_final_next_actions.transpose(0,
                                                  1).contiguous())
 
-            target_Q = th.zeros(
-                self.batch_size).type(FloatTensor)
+            target_Q = torch.zeros(
+                self.batch_size).to(Param.device).type(Param.dtype)
 
             target_Q[non_final_mask] = self.critics_target[agent](
                 non_final_next_states.view(-1, self.n_agents * self.n_states),
@@ -140,21 +129,20 @@ class MADDPG:
 
     def select_action(self, state_batch):
         # state_batch: n_agents x state_dim
-        actions = th.zeros(
+        actions = torch.zeros(
             self.n_agents,
             self.n_actions)
-        FloatTensor = th.cuda.FloatTensor if self.use_cuda else th.FloatTensor
         for i in range(self.n_agents):
             sb = state_batch[i, :].detach()
             act = self.actors[i](sb.unsqueeze(0)).squeeze()
 
-            act += th.from_numpy(
-                np.random.randn(2) * self.var[i]).type(FloatTensor)
+            act += torch.from_numpy(
+                np.random.randn(2) * self.var[i]).to(Param.device).type(Param.dtype)
 
             if self.episode_done > self.episodes_before_train and\
                self.var[i] > 0.05:
                 self.var[i] *= 0.999998
-            act = th.clamp(act, -1.0, 1.0)
+            act = torch.clamp(act, -1.0, 1.0)
 
             actions[i, :] = act
         self.steps_done += 1

@@ -1,0 +1,3 @@
+Number of Pursuers: 3  Number of Food:1  Number of Poison:1
+Number of Sensors: 6  Sensor Range:0.2    Speed Features:False
+Food Speed: 0.0  Poison Speed:0.0
