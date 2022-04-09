@@ -26,7 +26,7 @@ def hard_update(target, source):
 
 class MADDPG(nn.Module):
     def __init__(self, n_agents, dim_obs, dim_act, batch_size,
-                 capacity, episodes_before_train, noise_var=0.001, alpha=0.01):
+                 capacity, episodes_before_train, kwargs):
         super(MADDPG, self).__init__()
         self.actors = [Actor(dim_obs, dim_act, alpha=alpha).to(Param.device) for i in range(n_agents)]
         self.critics = [Critic(n_agents, dim_obs,
@@ -44,14 +44,14 @@ class MADDPG(nn.Module):
         self.GAMMA = 0.95
         self.tau = 0.01
         
-        self.alpha = alpha
-        self.noise_var = noise_var
+        self.alpha = kwargs["alpha"]
+        self.noise_var = kwargs["noise_var"]
 
-        self.var = [0.01 for i in range(n_agents)]
+        self.var = [0.008 for i in range(n_agents)]
         self.critic_optimizer = [Adam(x.parameters(),
-                                      lr=1e-4) for x in self.critics]
+                                      lr=kwargs["critic-lr"]) for x in self.critics]
         self.actor_optimizer = [Adam(x.parameters(),
-                                     lr=1e-5) for x in self.actors]
+                                      lr=kwargs["actor-lr"]) for x in self.actors]
 
         self.steps_done = 0
         self.episode_done = 0
@@ -146,7 +146,7 @@ class MADDPG(nn.Module):
 
             if self.episode_done > self.episodes_before_train and\
                self.var[i] > self.noise_var:
-                self.var[i] *= 0.9998
+                self.var[i] *= 0.9999
             act = torch.clamp(act, -0.01, 0.01)
 
             actions[i, :] = act
