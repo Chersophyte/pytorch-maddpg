@@ -9,7 +9,7 @@ import numpy as np
 from param import Param
 import os
 #from params import scale_reward
-scale_reward=0.1
+scale_reward=0.01
 
 def soft_update(target, source, t):
     for target_param, source_param in zip(target.parameters(),
@@ -28,7 +28,11 @@ class MADDPG(nn.Module):
     def __init__(self, n_agents, dim_obs, dim_act, batch_size,
                  capacity, episodes_before_train, kwargs):
         super(MADDPG, self).__init__()
-        self.actors = [Actor(dim_obs, dim_act, alpha=alpha).to(Param.device) for i in range(n_agents)]
+        
+        self.alpha = kwargs["alpha"]
+        self.noise_var = kwargs["noise-var"]
+        
+        self.actors = [Actor(dim_obs, dim_act, alpha=self.alpha).to(Param.device) for i in range(n_agents)]
         self.critics = [Critic(n_agents, dim_obs,
                                dim_act).to(Param.device) for i in range(n_agents)]
         self.actors_target = deepcopy(self.actors)
@@ -43,9 +47,6 @@ class MADDPG(nn.Module):
 
         self.GAMMA = 0.95
         self.tau = 0.01
-        
-        self.alpha = kwargs["alpha"]
-        self.noise_var = kwargs["noise_var"]
 
         self.var = [0.008 for i in range(n_agents)]
         self.critic_optimizer = [Adam(x.parameters(),
@@ -140,7 +141,6 @@ class MADDPG(nn.Module):
         for i in range(self.n_agents):
             sb = state_batch[i, :].detach()
             act = self.actors[i](sb.unsqueeze(0)).squeeze()
-
             act += torch.from_numpy(
                 np.random.randn(2) * self.var[i]).to(Param.device).type(Param.dtype)
 
